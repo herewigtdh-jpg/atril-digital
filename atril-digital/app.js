@@ -1,0 +1,269 @@
+/* ============ ATRIL DIGITAL v1.0 - Lógica principal ============ */
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  class Atril {
+    constructor() {
+      this.db = null; this.auth = null; this.usuario = null;
+      this.modoDemo = !!window.MODO_DEMO;
+      this.tiempoTranscurrido = 0; this.auditores = 0;
+      this.cacheElementos();
+      this.enlazarEventos();
+      this.iniciarReloj();
+      if (this.modoDemo) { this.iniciarDemo(); }
+      else { this.iniciarMotor(); }
+    }
+
+    cacheElementos() {
+      this.chat = $('chatContainer'); this.form = $('formInterpelacion');
+      this.input = $('inputInterpelacion'); this.contador = $('contadorAuditores');
+      this.tiempo = $('tiempoSesion'); this.toasts = $('toastContainer');
+      this.docente = $('nombreDocente'); this.termino = $('terminoDestacado');
+      this.userInfo = $('userInfo'); this.btnLogin = $('btnLogin'); this.btnRegistro = $('btnRegistro');
+      this.modal = $('modalAuth'); this.formAuth = $('formAuth'); this.modalError = $('modalError');
+      this.campoNombre = $('campoNombre'); this.campoEmail = $('campoEmail');
+      this.campoPassword = $('campoPassword'); this.btnSubmit = $('btnSubmitAuth');
+    }
+
+    enlazarEventos() {
+      this.form.addEventListener('submit', (e) => { e.preventDefault(); this.enviarInterpelacion(); });
+      $('btnRefrendar').addEventListener('click', () => this.refrendar());
+      $('btnDesconectar').addEventListener('click', () => this.desconectar());
+      document.querySelectorAll('.btn-reaccion').forEach(b =>
+        b.addEventListener('click', () => this.reaccion(b.dataset.reaccion)));
+      document.querySelectorAll('.btn-nav[data-seccion]').forEach(b =>
+        b.addEventListener('click', (e) => {
+          document.querySelectorAll('.btn-nav[data-seccion]').forEach(x => x.classList.remove('activo'));
+          e.currentTarget.classList.add('activo');
+        }));
+      this.btnLogin.addEventListener('click', () => this.abrirModal('ingreso'));
+      this.btnRegistro.addEventListener('click', () => this.abrirModal('registro'));
+      $('btnCerrarModal').addEventListener('click', () => this.cerrarModal());
+      this.formAuth.addEventListener('submit', (e) => { e.preventDefault(); this.procesarAuth(); });
+      $('btnGoogle').addEventListener('click', () => this.authGoogle());
+    }
+
+    /* ---------- Motor Firebase ---------- */
+    iniciarMotor() {
+      try {
+        firebase.initializeApp(window.FIREBASE_CONFIG);
+        this.auth = firebase.auth();
+        this.db = firebase.firestore();
+        this.auth.onAuthStateChanged(u => { this.usuario = u; this.pintarAuth(); });
+        this.escucharChat();
+        this.escucharSesion();
+        this.toast('Motor de datos vinculado. Operación homologada.');
+      } catch (err) {
+        console.error(err);
+        this.toast('Anomalía detectada al vincular el motor de datos.');
+      }
+    }
+
+    escucharChat() {
+      this.db.collection('interpelaciones')
+        .orderBy('timestamp', 'asc').limitToLast(50)
+        .onSnapshot(snap => {
+          this.chat.innerHTML = '';
+          this.mensajeSistema('Bienvenido al Atril Digital. Formule sus interpelaciones con precisión.');
+          snap.forEach(d => {
+            const m = d.data();
+            this.mensajeChat(m.nombreAutor || 'Aprendiz', m.texto, m.timestamp && m.timestamp.toDate());
+          });
+        }, err => {
+          console.warn(err);
+          this.mensajeSistema('El motor de datos está en espera. Verifique Firestore en la consola de Firebase.');
+        });
+    }
+
+    escucharSesion() {
+      this.db.collection('sesiones').doc('activa').onSnapshot(d => {
+        if (d && d.exists) {
+          const s = d.data();
+          if (s.docente) this.docente.textContent = s.docente;
+          if (s.terminoMomento) this.termino.textContent = s.terminoMomento;
+        }
+      }, () => {});
+    }
+
+    /* ---------- Interpelaciones ---------- */
+    enviarInterpelacion() {
+      const texto = this.input.value.trim();
+      if (!texto) return;
+      if (this.modoDemo) {
+        this.mensajeChat('Aprendiz (demo)', texto, new Date());
+        this.input.value = '';
+        return;
+      }
+      if (!this.usuario) {
+        this.toast('Requisito vinculante: autentifíquese para interpelar.');
+        this.abrirModal('ingreso');
+        return;
+      }
+      this.db.collection('interpelaciones').add({
+        autor: this.usuario.uid,
+        nombreAutor: this.usuario.displayName || this.usuario.email,
+        texto: texto,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        this.input.value = '';
+        this.toast('Interpelación transmitida al atril.');
+      }).catch(err => { console.error(err); this.toast('Anomalía detectada al transmitir.'); });
+    }
+
+    /* ---------- Autenticación ---------- */
+    abrirModal(modo) {
+      if (this.modoDemo) { this.toast('La autenticación se activa al configurar Firebase.'); return; }
+      this.modoAuth = modo;
+      $('tituloModal').textContent = (modo === 'registro') ? 'Registro de Aprendiz' : 'Acceso al Atril';
+      this.campoNombre.hidden = (modo !== 'registro');
+      this.btnSubmit.textContent = (modo === 'registro') ? 'Consolidar Registro' : 'Ingresar';
+      this.modalError.textContent = '';
+      this.modal.hidden = false;
+      this.campoEmail.focus();
+    }
+    cerrarModal() { this.modal.hidden = true; }
+
+    procesarAuth() {
+      const email = this.campoEmail.value.trim();
+      const pass = this.campoPassword.value;
+      const nombre = this.campoNombre.value.trim();
+      this.modalError.textContent = '';
+      if (this.modoAuth === 'registro') {
+        this.auth.createUserWithEmailAndPassword(email, pass)
+          .then(cred => cred.user.updateProfile({ displayName: nombre || null })
+            .then(() => this.db.collection('usuarios').doc(cred.user.uid).set({
+              nombre: nombre || email, email: email, rol: 'aprendiz',
+              fechaRegistro: firebase.firestore.FieldValue.serverTimestamp()
+            })))
+          .then(() => { this.cerrarModal(); this.toast('Registro homologado. Bienvenido al Atril.'); })
+          .catch(err => { this.modalError.textContent = this.traducir(err.code); });
+      } else {
+        this.auth.signInWithEmailAndPassword(email, pass)
+          .then(() => { this.cerrarModal(); this.toast('Sesión iniciada correctamente.'); })
+          .catch(err => { this.modalError.textContent = this.traducir(err.code); });
+      }
+    }
+
+    authGoogle() {
+      const prov = new firebase.auth.GoogleAuthProvider();
+      this.auth.signInWithPopup(prov)
+        .then(() => { this.cerrarModal(); this.toast('Sesión homologada con Google.'); })
+        .catch(err => { this.modalError.textContent = this.traducir(err.code); });
+    }
+
+    pintarAuth() {
+      this.userInfo.innerHTML = '';
+      if (this.usuario) {
+        this.btnLogin.hidden = true; this.btnRegistro.hidden = true; this.userInfo.hidden = false;
+        const span = document.createElement('span');
+        span.className = 'nombre-usuario';
+        span.textContent = this.usuario.displayName || this.usuario.email;
+        const btn = document.createElement('button');
+        btn.className = 'btn-secundario btn-sm';
+        btn.textContent = 'Desvincular';
+        btn.addEventListener('click', () => this.auth.signOut());
+        this.userInfo.append(span, btn);
+      } else {
+        this.btnLogin.hidden = false; this.btnRegistro.hidden = false; this.userInfo.hidden = true;
+      }
+    }
+
+    traducir(code) {
+      const map = {
+        'auth/email-already-in-use': 'El correo ya está vinculado a una cuenta existente.',
+        'auth/invalid-email': 'Formato de correo inconsistente.',
+        'auth/weak-password': 'La contraseña requiere mínimo 6 caracteres.',
+        'auth/user-not-found': 'No existe cuenta con estas credenciales.',
+        'auth/wrong-password': 'Contraseña incorrecta.',
+        'auth/invalid-credential': 'Credenciales inconsistentes. Verifique correo y contraseña.',
+        'auth/popup-closed-by-user': 'Ventana de acceso cerrada antes de concluir.'
+      };
+      return map[code] || 'Anomalía detectada en la autenticación.';
+    }
+
+    /* ---------- Progreso y sesión ---------- */
+    refrendar() {
+      if (this.modoDemo) { this.toast('Operación homologada (demo). Avance diligenciado.'); return; }
+      if (!this.usuario) { this.toast('Requisito vinculante: autentifíquese para refrendar.'); this.abrirModal('ingreso'); return; }
+      this.db.collection('progreso').doc(this.usuario.uid).set({
+        ultimaActividad: firebase.firestore.FieldValue.serverTimestamp(),
+        segundos: firebase.firestore.FieldValue.increment(this.tiempoTranscurrido)
+      }, { merge: true })
+        .then(() => this.toast('Operación homologada. Avance diligenciado en su vademécum.'))
+        .catch(() => this.toast('Anomalía detectada al refrendar.'));
+    }
+
+    desconectar() {
+      if (confirm('¿Confirma su desvinculación de la sesión en curso?')) {
+        const fin = () => { this.toast('Desconexión procesada.'); setTimeout(() => location.reload(), 1200); };
+        if (this.usuario) { this.auth.signOut().then(fin); } else { fin(); }
+      }
+    }
+
+    reaccion(tipo) {
+      const emojis = { aplausos: '👏', duda: '❓', interes: '💡', acuerdo: '✓' };
+      this.mensajeChat('Sistema', 'Reacción transmitida: ' + emojis[tipo], new Date());
+      if (!this.modoDemo && this.usuario) {
+        this.db.collection('reacciones').add({
+          usuario: this.usuario.uid, tipo: tipo,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+      }
+      this.toast('Reacción "' + tipo + '" transmitida al atril.');
+    }
+
+    /* ---------- Modo demostración y utilidades ---------- */
+    iniciarDemo() {
+      this.auditores = 7;
+      this.contador.textContent = this.auditores;
+      setInterval(() => {
+        this.auditores += Math.floor(Math.random() * 3);
+        this.contador.textContent = this.auditores;
+      }, 5000);
+      this.mensajeSistema('Modo demostración activo: configure Firebase para habilitar el motor real de datos.');
+    }
+
+    iniciarReloj() {
+      setInterval(() => {
+        this.tiempoTranscurrido++;
+        const h = String(Math.floor(this.tiempoTranscurrido / 3600)).padStart(2, '0');
+        const m = String(Math.floor((this.tiempoTranscurrido % 3600) / 60)).padStart(2, '0');
+        const s = String(this.tiempoTranscurrido % 60).padStart(2, '0');
+        this.tiempo.textContent = h + ':' + m + ':' + s;
+      }, 1000);
+    }
+
+    mensajeChat(autor, texto, fecha) {
+      const div = document.createElement('div');
+      div.className = 'mensaje-chat';
+      const hora = fecha ? fecha.toLocaleTimeString() : new Date().toLocaleTimeString();
+      div.innerHTML = '<strong></strong> <span class="cuerpo"></span><span class="timestamp"></span>';
+      div.querySelector('strong').textContent = autor + ':';
+      div.querySelector('.cuerpo').textContent = texto;
+      div.querySelector('.timestamp').textContent = hora;
+      this.chat.appendChild(div);
+      this.chat.scrollTop = this.chat.scrollHeight;
+    }
+
+    mensajeSistema(texto) {
+      const div = document.createElement('div');
+      div.className = 'mensaje-sistema';
+      const emoji = document.createElement('span'); emoji.textContent = '💡';
+      const p = document.createElement('p'); p.textContent = texto;
+      div.append(emoji, p);
+      this.chat.appendChild(div);
+      this.chat.scrollTop = this.chat.scrollHeight;
+    }
+
+    toast(mensaje) {
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = mensaje;
+      this.toasts.appendChild(t);
+      setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { window.ATRIL = new Atril(); });
+})();
