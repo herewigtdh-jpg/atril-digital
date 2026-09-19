@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atril Digital | Inscripción de aprendices</title>
+<meta name="description" content="Clases de inglés en vivo con docente nativo y progreso gamificado. Reserve su asiento en el Atril Digital.">
+<link rel="stylesheet" href="styles.css">
+<style>
+ .portada{max-width:900px;margin:0 auto;padding:2rem 1rem;text-align:center}
+ .portada h1{font-size:2.2rem;margin:1rem 0 .5rem}
+ .portada .sub{font-size:1.1rem;color:var(--color-texto-secundario);max-width:640px;margin:0 auto 1.5rem}
+ .tarjetas{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:2rem 0}
+ .tarjeta{background:#fff;border:2px solid var(--color-borde);border-radius:12px;padding:1.25rem}
+ .estado-vivo{background:#ECFDF5;border:2px solid var(--color-dominio);border-radius:12px;padding:1rem;margin:1rem auto;max-width:520px}
+ .estado-vivo.apagado{background:var(--color-fondo-secundario);border-color:var(--color-borde)}
+ .form-inscripcion{max-width:420px;margin:2rem auto;background:#fff;border:2px solid var(--color-borde);border-radius:12px;padding:2rem;text-align:left}
+ .form-inscripcion label{display:block;font-weight:600;margin:.75rem 0 .25rem}
+ .form-inscripcion input{width:100%;padding:.65rem;border:2px solid var(--color-borde);border-radius:8px;font:inherit}
+ @media(max-width:760px){.tarjetas{grid-template-columns:1fr}}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+<header class="atrio-principal"><div class="contenedor-header">
+ <div class="logo-marca"><span class="emoji-logo">🎓</span><div class="texto-marca"><h1>Atril Digital</h1><p class="lema">Tecnificación del idioma en tiempo real</p></div></div>
+ <nav class="navegacion-principal"><a class="btn-nav" href="index.html">Ir al aula</a><a class="btn-nav" href="biblioteca.html">Biblioteca</a></nav>
+</div></header>
+
+<main class="portada">
+ <h1>Viva el inglés en tiempo real</h1>
+ <p class="sub">Clases en vivo con <strong>Herewig, el Mago del Inglés</strong>, progreso gamificado por colores y una comunidad que aprende haciendo. Estándar de academia de lujo, al alcance del pueblo.</p>
+
+ <div class="estado-vivo apagado" id="estadoSesion">
+   <strong id="textoEstado">Consultando el estado del aula…</strong><br>
+   <a class="btn-principal" id="btnEntrarVivo" href="index.html" style="display:none;margin-top:.75rem">Entrar al aula EN DIRECTO</a>
+ </div>
+
+ <div class="tarjetas">
+  <div class="tarjeta"><h3>🎥 Aula en vivo</h3><p>Video y voz del docente en tiempo real, pantalla compartida y moderación de interpelaciones.</p></div>
+  <div class="tarjeta"><h3>🎨 Vademécum cromático</h3><p>Cada término viaja de Adquisición a Dominio con colores, puntos y ceremonias.</p></div>
+  <div class="tarjeta"><h3>📚 Biblioteca de sesiones</h3><p>Las clases quedan archivadas para repasar cuando quiera.</p></div>
+ </div>
+
+ <form class="form-inscripcion" id="formInscripcion">
+   <h2>Reserve su asiento</h2>
+   <label for="campoNombreIns">Nombre completo</label>
+   <input id="campoNombreIns" type="text" required>
+   <label for="campoEmailIns">Correo electrónico</label>
+   <input id="campoEmailIns" type="email" required>
+   <label for="campoPassIns">Contraseña (mínimo 6 caracteres)</label>
+   <input id="campoPassIns" type="password" required minlength="6">
+   <p class="modal-error" id="errorIns" role="alert"></p>
+   <button class="btn-principal" type="submit" style="width:100%">Consolidar mi inscripción</button>
+   <p class="descripcion-progreso" style="margin-top:.75rem">Temporada de estreno: acceso de prueba gratuito. A la apertura oficial: US$1/mes.</p>
+ </form>
+</main>
+
+<div class="contenedor-toast" id="toastContainer" aria-live="polite"></div>
+<script src="firebase-config.js"></script>
+<script>
+ firebase.initializeApp(window.FIREBASE_CONFIG);
+ const auth = firebase.auth(), db = firebase.firestore();
+
+ db.collection('sesiones').doc('activa').onSnapshot(d => {
+   const caja = document.getElementById('estadoSesion');
+   const txt = document.getElementById('textoEstado');
+   const btn = document.getElementById('btnEntrarVivo');
+   const activa = d.exists && d.data().activa;
+   if (activa) {
+     caja.classList.remove('apagado');
+     txt.textContent = '🔴 EN DIRECTO AHORA: ' + (d.data().docente || 'el docente') + ' está en el atril.';
+     btn.style.display = 'inline-block';
+   } else {
+     caja.classList.add('apagado');
+     txt.textContent = 'El aula está en espera. Inscríbase y le recibiremos en la próxima sesión de inmersión.';
+     btn.style.display = 'none';
+   }
+ }, () => {});
+
+ auth.onAuthStateChanged(u => {
+   if (u) {
+     document.getElementById('formInscripcion').innerHTML =
+       '<h2>Su asiento ya existe</h2><p class="sub">Bienvenido de vuelta, ' + (u.displayName || u.email) + '.</p>' +
+       '<a class="btn-principal" href="index.html" style="display:inline-block;width:100%;text-align:center">Entrar al aula</a>';
+   }
+ });
+
+ document.getElementById('formInscripcion').addEventListener('submit', e => {
+   e.preventDefault();
+   const err = document.getElementById('errorIns');
+   err.textContent = '';
+   const nombre = document.getElementById('campoNombreIns').value.trim();
+   const email = document.getElementById('campoEmailIns').value.trim();
+   const pass = document.getElementById('campoPassIns').value;
+   auth.createUserWithEmailAndPassword(email, pass)
+     .then(c => c.user.updateProfile({ displayName: nombre })
+       .then(() => db.collection('usuarios').doc(c.user.uid).set({
+         nombre: nombre, email: email, rol: 'aprendiz',
+         fechaRegistro: firebase.firestore.FieldValue.serverTimestamp()
+       })))
+     .then(() => { location.href = 'index.html'; })
+     .catch(() => { err.textContent = 'Anomalía en la inscripción: revise correo y contraseña.'; });
+ });
+</script>
+</body>
+</html>
