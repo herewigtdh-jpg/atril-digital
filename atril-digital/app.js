@@ -87,7 +87,7 @@
 
     /* ---------- VIDEO EN VIVO (LiveKit) ---------- */
     async conectarVideo(sesion) {
-      if (this.room || !window.LivekitClient) return;
+      if (this.room || !window.LivekitClient) return;this.overlayConectando();
       const identidad = this.usuario ? this.usuario.uid : 'invitado-' + Date.now();
       const nombre = this.usuario ? (this.usuario.displayName || this.usuario.email) : 'Aprendiz';
       try {
@@ -135,7 +135,20 @@
       this.mostrarOverlay();
     }
 
-    mostrarOverlay() { const o = document.querySelector('.overlay-video'); if (o) o.style.display = 'flex'; }
+       mostrarOverlay() { this.overlayEspera(); }
+    overlayEspera() {
+      const o = document.querySelector('.overlay-video'); if (!o) return;
+      o.style.display = 'flex';
+      const m = $('mensajeOverlay'); if (m) m.textContent = 'El aula está en espera: se abrirá en vivo cuando el docente inicie la sesión de inmersión.';
+      const n = $('notaOverlay'); if (n) n.textContent = 'Docente: Herewig, el Mago del Inglés';
+      const l = $('loaderOverlay'); if (l) l.hidden = true;
+    }
+    overlayConectando() {
+      const o = document.querySelector('.overlay-video'); if (!o) return;
+      o.style.display = 'flex';
+      const m = $('mensajeOverlay'); if (m) m.textContent = 'Estableciendo enlace con el Docente Nativo…';
+      const l = $('loaderOverlay'); if (l) l.hidden = false;
+    }
     ocultarOverlay() { const o = document.querySelector('.overlay-video'); if (o) o.style.display = 'none'; }
 
     /* ---------- Interpelaciones ---------- */
