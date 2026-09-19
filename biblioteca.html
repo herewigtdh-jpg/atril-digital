@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Biblioteca de sesiones | Atril Digital</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+ .biblio{max-width:900px;margin:2rem auto;padding:0 1rem}
+ .grid-sesiones{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-top:1rem}
+ .tarjeta-sesion{background:#fff;border:2px solid var(--color-borde);border-radius:12px;padding:1.25rem;display:flex;flex-direction:column;gap:.5rem}
+ .tarjeta-sesion h3{font-size:1.05rem}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+<header class="atrio-principal"><div class="contenedor-header">
+ <div class="logo-marca"><span class="emoji-logo">📚</span><div class="texto-marca"><h1>Biblioteca de sesiones</h1><p class="lema">El archivo vivo del Atril Digital</p></div></div>
+ <nav class="navegacion-principal"><a class="btn-nav" href="index.html">Ir al aula</a><a class="btn-nav" href="inscripcion.html">Inscripción</a></nav>
+</div></header>
+<main class="biblio">
+ <p class="descripcion-progreso">Cada sesión archivada por el docente queda aquí para repaso diferido.</p>
+ <div class="grid-sesiones" id="gridSesiones"></div>
+</main>
+<script src="firebase-config.js"></script>
+<script>
+ firebase.initializeApp(window.FIREBASE_CONFIG);
+ const db = firebase.firestore();
+ db.collection('biblioteca').orderBy('fecha','desc').limit(60).onSnapshot(snap => {
+   const grid = document.getElementById('gridSesiones');
+   grid.innerHTML = '';
+   if (snap.empty) { grid.innerHTML = '<p class="descripcion-progreso">Aún no hay sesiones archivadas: la biblioteca abrirá con la primera función.</p>'; return; }
+   snap.forEach(d => {
+     const s = d.data();
+     const card = document.createElement('div');
+     card.className = 'tarjeta-sesion';
+     const f = s.fecha && s.fecha.toDate ? s.fecha.toDate().toLocaleDateString() : '';
+     card.innerHTML = '<h3></h3><p class="descripcion-progreso"></p>' + (s.termino ? '<span class="chip-termino" data-estado="consolidacion"></span>' : '') + (s.youtubeUrl ? '<a class="btn-principal" target="_blank" rel="noopener" style="text-align:center">Ver sesión</a>' : '');
+     card.querySelector('h3').textContent = s.titulo;
+     card.querySelector('.descripcion-progreso').textContent = f;
+     if (s.termino) card.querySelector('.chip-termino').textContent = 'Término: ' + s.termino;
+     if (s.youtubeUrl) card.querySelector('a').href = s.youtubeUrl;
+     grid.appendChild(card);
+   });
+ }, err => { console.warn(err); });
+</script>
+</body>
+</html>
