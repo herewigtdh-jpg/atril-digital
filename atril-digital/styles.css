@@ -118,3 +118,6 @@ body{font-family:var(--fuente-principal);line-height:1.6;color:var(--color-texto
 /* Responsive */
 @media (max-width:1024px){.contenedor-holístico{grid-template-columns:1fr}.panel-interaccion{grid-column:1;grid-row:2}.panel-progreso{grid-column:1;grid-row:3}}
 @media (max-width:768px){.contenedor-header{flex-direction:column;align-items:flex-start}.barra-acciones{flex-direction:column}}
+/* Video en vivo del docente */
+#videoRemoto{width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px}
+.overlay-video[style*="none"]{display:none!important}

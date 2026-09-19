@@ -1,4 +1,4 @@
-/* ============ ATRIL DIGITAL v1.0 - Lógica principal ============ */
+/* ============ ATRIL DIGITAL v2.0 - Aula con video en vivo ============ */
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -7,12 +7,12 @@
     constructor() {
       this.db = null; this.auth = null; this.usuario = null;
       this.modoDemo = !!window.MODO_DEMO;
+      this.room = null;
       this.tiempoTranscurrido = 0; this.auditores = 0;
       this.cacheElementos();
       this.enlazarEventos();
       this.iniciarReloj();
-      if (this.modoDemo) { this.iniciarDemo(); }
-      else { this.iniciarMotor(); }
+      if (this.modoDemo) { this.iniciarDemo(); } else { this.iniciarMotor(); }
     }
 
     cacheElementos() {
@@ -44,7 +44,6 @@
       $('btnGoogle').addEventListener('click', () => this.authGoogle());
     }
 
-    /* ---------- Motor Firebase ---------- */
     iniciarMotor() {
       try {
         firebase.initializeApp(window.FIREBASE_CONFIG);
@@ -72,43 +71,86 @@
           });
         }, err => {
           console.warn(err);
-          this.mensajeSistema('El motor de datos está en espera. Verifique Firestore en la consola de Firebase.');
+          this.mensajeSistema('El motor de datos está en espera. Verifique Firestore.');
         });
     }
 
     escucharSesion() {
       this.db.collection('sesiones').doc('activa').onSnapshot(d => {
-        if (d && d.exists) {
-          const s = d.data();
-          if (s.docente) this.docente.textContent = s.docente;
-          if (s.terminoMomento) this.termino.textContent = s.terminoMomento;
-        }
+        if (!d.exists) { this.desconectarVideo(); return; }
+        const s = d.data();
+        if (s.docente) this.docente.textContent = s.docente;
+        if (s.terminoMomento) this.termino.textContent = s.terminoMomento;
+        if (s.activa) { this.conectarVideo(s); } else { this.desconectarVideo(); }
       }, () => {});
     }
+
+    /* ---------- VIDEO EN VIVO (LiveKit) ---------- */
+    async conectarVideo(sesion) {
+      if (this.room || !window.LivekitClient) return;
+      const identidad = this.usuario ? this.usuario.uid : 'invitado-' + Date.now();
+      const nombre = this.usuario ? (this.usuario.displayName || this.usuario.email) : 'Aprendiz';
+      try {
+        const resp = await fetch('/.netlify/functions/token?room=' +
+          encodeURIComponent(sesion.sala || 'atril-sala-principal') +
+          '&identity=' + encodeURIComponent(identidad) +
+          '&name=' + encodeURIComponent(nombre) + '&publish=0');
+        const data = await resp.json();
+        if (!data.token) throw new Error('sin token');
+        const LK = window.LivekitClient;
+        this.room = new LK.Room({ adaptiveStream: true, dynacast: true });
+        this.room.on(LK.RoomEvent.TrackSubscribed, (track, pub, part) => this.adjuntarTrack(track, part));
+        this.room.on(LK.RoomEvent.TrackUnsubscribed, (track) => track.detach());
+        this.room.on(LK.RoomEvent.Disconnected, () => { this.room = null; this.mostrarOverlay(); });
+        await this.room.connect(data.url, data.token);
+        this.ocultarOverlay();
+        this.toast('Enlace de video establecido con el atril.');
+      } catch (err) {
+        console.error(err);
+        this.toast('Anomalía al establecer el video: ' + (err.message || err));
+      }
+    }
+
+    adjuntarTrack(track, part) {
+      const visor = $('videoContainer');
+      if (track.kind === 'video') {
+        let el = $('videoRemoto');
+        if (!el) {
+          el = document.createElement('video');
+          el.id = 'videoRemoto'; el.autoplay = true; el.playsInline = true;
+          visor.appendChild(el);
+        }
+        track.attach(el);
+      } else {
+        const a = track.attach();
+        a.id = 'audioRemoto';
+        document.body.appendChild(a);
+      }
+    }
+
+    desconectarVideo() {
+      if (this.room) { this.room.disconnect(); this.room = null; }
+      const v = $('videoRemoto'); if (v) v.remove();
+      const a = $('audioRemoto'); if (a) a.remove();
+      this.mostrarOverlay();
+    }
+
+    mostrarOverlay() { const o = document.querySelector('.overlay-video'); if (o) o.style.display = 'flex'; }
+    ocultarOverlay() { const o = document.querySelector('.overlay-video'); if (o) o.style.display = 'none'; }
 
     /* ---------- Interpelaciones ---------- */
     enviarInterpelacion() {
       const texto = this.input.value.trim();
       if (!texto) return;
-      if (this.modoDemo) {
-        this.mensajeChat('Aprendiz (demo)', texto, new Date());
-        this.input.value = '';
-        return;
-      }
-      if (!this.usuario) {
-        this.toast('Requisito vinculante: autentifíquese para interpelar.');
-        this.abrirModal('ingreso');
-        return;
-      }
+      if (this.modoDemo) { this.mensajeChat('Aprendiz (demo)', texto, new Date()); this.input.value = ''; return; }
+      if (!this.usuario) { this.toast('Requisito vinculante: autentifíquese para interpelar.'); this.abrirModal('ingreso'); return; }
       this.db.collection('interpelaciones').add({
         autor: this.usuario.uid,
         nombreAutor: this.usuario.displayName || this.usuario.email,
         texto: texto,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      }).then(() => {
-        this.input.value = '';
-        this.toast('Interpelación transmitida al atril.');
-      }).catch(err => { console.error(err); this.toast('Anomalía detectada al transmitir.'); });
+      }).then(() => { this.input.value = ''; this.toast('Interpelación transmitida al atril.'); })
+        .catch(err => { console.error(err); this.toast('Anomalía detectada al transmitir.'); });
     }
 
     /* ---------- Autenticación ---------- */
@@ -176,7 +218,7 @@
         'auth/weak-password': 'La contraseña requiere mínimo 6 caracteres.',
         'auth/user-not-found': 'No existe cuenta con estas credenciales.',
         'auth/wrong-password': 'Contraseña incorrecta.',
-        'auth/invalid-credential': 'Credenciales inconsistentes. Verifique correo y contraseña.',
+        'auth/invalid-credential': 'Credenciales inconsistentes.',
         'auth/popup-closed-by-user': 'Ventana de acceso cerrada antes de concluir.'
       };
       return map[code] || 'Anomalía detectada en la autenticación.';
@@ -213,15 +255,12 @@
       this.toast('Reacción "' + tipo + '" transmitida al atril.');
     }
 
-    /* ---------- Modo demostración y utilidades ---------- */
+    /* ---------- Demo y utilidades ---------- */
     iniciarDemo() {
       this.auditores = 7;
       this.contador.textContent = this.auditores;
-      setInterval(() => {
-        this.auditores += Math.floor(Math.random() * 3);
-        this.contador.textContent = this.auditores;
-      }, 5000);
-      this.mensajeSistema('Modo demostración activo: configure Firebase para habilitar el motor real de datos.');
+      setInterval(() => { this.auditores += Math.floor(Math.random() * 3); this.contador.textContent = this.auditores; }, 5000);
+      this.mensajeSistema('Modo demostración activo: configure Firebase para el motor real.');
     }
 
     iniciarReloj() {
@@ -253,7 +292,6 @@
       const p = document.createElement('p'); p.textContent = texto;
       div.append(emoji, p);
       this.chat.appendChild(div);
-      this.chat.scrollTop = this.chat.scrollHeight;
     }
 
     toast(mensaje) {
