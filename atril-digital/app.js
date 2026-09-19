@@ -80,7 +80,10 @@
         if (!d.exists) { this.desconectarVideo(); return; }
         const s = d.data();
         if (s.docente) this.docente.textContent = s.docente;
-        if (s.terminoMomento) this.termino.textContent = s.terminoMomento;
+        if (s.terminoMomento) {
+          this.termino.textContent = s.terminoMomento;
+          if (this._ultTermino !== s.terminoMomento) { this._ultTermino = s.terminoMomento; this.sembrarTermino(s.terminoMomento); }
+        }
         if (s.activa) { this.conectarVideo(s); } else { this.desconectarVideo(); }
       }, () => {});
     }
@@ -134,7 +137,45 @@
       const a = $('audioRemoto'); if (a) a.remove();
       this.mostrarOverlay();
     }
-
+        escucharVademecum() {
+      if (this._vadeSub) { this._vadeSub(); this._vadeSub = null; }
+      if (!this.usuario) { this.renderVademecum({}); return; }
+      this._vadeSub = this.db.collection('vademecum').doc(this.usuario.uid).onSnapshot(d => {
+        this.renderVademecum(d.exists ? (d.data().terminos || {}) : {});
+      }, () => {});
+    }
+    renderVademecum(terminos) {
+      const cont = $('listaVademecum'); if (!cont) return;
+      cont.innerHTML = '';
+      const claves = Object.keys(terminos);
+      if (!claves.length) { cont.innerHTML = '<p class="descripcion-progreso">Aún no hay términos: cuando el docente fije el Término del Momento, aparecerá aquí.</p>'; return; }
+      claves.forEach(t => {
+        const chip = document.createElement('button');
+        chip.className = 'chip-termino';
+        chip.dataset.estado = terminos[t];
+        chip.textContent = t + ' · ' + terminos[t];
+        chip.title = 'Clic para avanzar de estado';
+        chip.addEventListener('click', () => this.avanzarTermino(t, terminos[t]));
+        cont.appendChild(chip);
+      });
+    }
+    avanzarTermino(t, estado) {
+      if (!this.usuario) return;
+      const orden = { adquisicion: 'consolidacion', consolidacion: 'dominio', dominio: 'dominio' };
+      const sig = orden[estado] || 'consolidacion';
+      if (sig === estado) { this.toast('Este término ya está en Dominio consolidado. 🏅'); return; }
+      const pts = sig === 'consolidacion' ? 5 : 10;
+      this.db.collection('vademecum').doc(this.usuario.uid).set({
+        ['terminos.' + t]: sig,
+        puntos: firebase.firestore.FieldValue.increment(pts)
+      }, { merge: true }).then(() => {
+        this.toast(sig === 'dominio' ? '🏅 Ceremonia de Dominio consolidado: ' + t : '➡️ ' + t + ' pasa a Consolidación (+' + pts + ' puntos)');
+      }).catch(() => this.toast('Anomalía al avanzar el término.'));
+    }
+    sembrarTermino(t) {
+      if (!this.usuario || !t) return;
+      this.db.collection('vademecum').doc(this.usuario.uid).set({ ['terminos.' + t]: 'adquisicion' }, { merge: true }).catch(() => {});
+    } 
        mostrarOverlay() { this.overlayEspera(); }
     overlayEspera() {
       const o = document.querySelector('.overlay-video'); if (!o) return;
@@ -219,6 +260,7 @@
         btn.textContent = 'Desvincular';
         btn.addEventListener('click', () => this.auth.signOut());
         this.userInfo.append(span, btn);
+        this.escucharVademecum();
       } else {
         this.btnLogin.hidden = false; this.btnRegistro.hidden = false; this.userInfo.hidden = true;
       }
