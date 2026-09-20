@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Atril Digital - Tecnificación del Idioma Español en Tiempo Real">
+    <title>Atril Digital | Tecnificación del Idioma en Tiempo Real</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+
+    <!-- Motor Firebase (SDK compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <header class="atrio-principal" role="banner">
+        <div class="contenedor-header">
+            <div class="logo-marca">
+                <span class="emoji-logo">🎓</span>
+                <div class="texto-marca">
+                    <h1>Atril Digital</h1>
+                    <p class="lema">Tecnificación del Idioma en Tiempo Real</p>
+                </div>
+            </div>
+            <nav class="navegacion-principal" aria-label="Navegación principal">
+                <button class="btn-nav activo" data-seccion="inicio">Atril Principal</button>
+                <button class="btn-nav" data-seccion="vademecum">Vademécum</button>
+                <button class="btn-nav" data-seccion="recursos">Recursos</button>
+            </nav>
+            <div class="zona-auth">
+                <button class="btn-nav" id="btnLogin">Ingresar</button>
+                <button class="btn-nav" id="btnRegistro">Consolidar Registro</button>
+                <div class="usuario-info" id="userInfo" hidden></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="contenedor-holístico" role="main">
+        <!-- Módulo de Transmisión -->
+        <section class="modulo-transmision" aria-label="Transmisión en vivo con docente nativo">
+            <div class="encabezado-modulo">
+                <div class="info-sesion">
+                    <h2>Sesión de Inmersión Lingüística</h2>
+                    <div class="metadatos-sesion">
+                        <span class="estado-en-vivo" aria-live="polite"><span class="punto-vivo"></span> EN DIRECTO</span>
+                        <span class="contador-auditores"><strong id="contadorAuditores">0</strong> Auditores Conectados</span>
+                    </div>
+                </div>
+            </div>
+            <div class="visor-video" id="videoContainer">
+                <div class="overlay-video">
+                    <div class="mensaje-espera">
+                        <span class="emoji-grande">📡</span>
+                        <p id="mensajeOverlay">El aula está en espera: se abrirá en vivo cuando el docente inicie la sesión de inmersión.</p>
+                        <p class="nota-fase" id="notaOverlay">Docente: Herewig, el Mago del Inglés</p>
+                         <div class="loader" id="loaderOverlay" hidden></div>
+                    </div>
+                </div>
+            </div>
+            <div class="info-docente">
+                <div class="avatar-docente"><span>👨‍</span></div>
+                <div class="detalles-docente">
+                    <strong>Docente Nativo en Ejercicio:</strong>
+                   <span id="nombreDocente">Herewig, el Mago del Inglés</span>
+                   <p class="especialidad">Gramática viva, voz y conversación en tiempo real</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel de Interacción -->
+        <section class="panel-interaccion" aria-label="Interpelaciones y chat en vivo">
+            <h2>Interpelaciones al Atril</h2>
+            <div class="termino-momento" aria-live="polite">
+                <div class="encabezado-termino">
+                    <span class="etiqueta-termino">📚 Término del Momento:</span>
+                </div>
+                <strong id="terminoDestacado" class="palabra-destacada">Ratificar</strong>
+                <p class="definicion-termino">Confirmar o validar algo con autoridad o formalidad.</p>
+            </div>
+            <div class="chat-contenedor" id="chatContainer" role="log" aria-live="polite"></div>
+            <form class="formulario-interpelacion" id="formInterpelacion">
+                <label for="inputInterpelacion" class="sr-only">Formule su interpelación</label>
+                <input type="text" id="inputInterpelacion" placeholder="Formule su interpelación…" maxlength="280" required>
+                <button type="submit" class="btn-principal">Transmitir</button>
+            </form>
+            <div class="reacciones-rapidas">
+                <button class="btn-reaccion" data-reaccion="aplausos" aria-label="Enviar aplausos">👏</button>
+                <button class="btn-reaccion" data-reaccion="duda" aria-label="Indicar duda">❓</button>
+                <button class="btn-reaccion" data-reaccion="interes" aria-label="Indicar interés">💡</button>
+                <button class="btn-reaccion" data-reaccion="acuerdo" aria-label="Expresar acuerdo">✓</button>
+            </div>
+        </section>
+
+        <!-- Panel de Progreso -->
+        <aside class="panel-progreso" aria-label="Progreso del aprendizaje">
+            <h2>Vademécum del Aprendiz</h2>
+            <p class="descripcion-progreso">Su trayecto de interiorización lingüística</p>
+            <div class="indicador-progreso">
+                <div class="encabezado-indicador"><span class="etiqueta-indicador">🔵 Adquisiciones</span><span class="valor-indicador">12 / 40</span></div>
+                <div class="barra-progreso" role="progressbar" aria-valuenow="30" aria-valuemin="0" aria-valuemax="100"><div class="relleno" style="width:30%;background-color:var(--color-adquisicion);"></div></div>
+            </div>
+            <div class="indicador-progreso">
+                <div class="encabezado-indicador"><span class="etiqueta-indicador">🟡 Consolidaciones</span><span class="valor-indicador">8 / 16</span></div>
+                <div class="barra-progreso" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"><div class="relleno" style="width:50%;background-color:var(--color-consolidacion);"></div></div>
+            </div>
+            <div class="indicador-progreso">
+                <div class="encabezado-indicador"><span class="etiqueta-indicador">🟢 Dominios</span><span class="valor-indicador">15 / 20</span></div>
+                <div class="barra-progreso" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"><div class="relleno" style="width:75%;background-color:var(--color-dominio);"></div></div>
+            </div>
+            <div class="vademecum-terminos">
+              <h3>Sus términos en camino</h3>
+              <div id="listaVademecum" class="lista-vademecum"></div>
+            </div> 
+        </aside>
+    </main>
+
+    <footer class="barra-acciones" role="contentinfo">
+        <div class="info-sesion-pie">
+            <span>⏱️ Sesión activa: <strong id="tiempoSesion">00:00:00</strong></span>
+        </div>
+        <div class="acciones-principales">
+            <button class="btn-secundario" id="btnDesconectar">Desconectarse de la Sesión</button>
+            <button class="btn-principal" id="btnRefrendar">Refrendar Avance y Continuar</button>
+        </div>
+    </footer>
+
+    <!-- Modal de Autenticación -->
+    <div class="modal-fondo" id="modalAuth" role="dialog" aria-modal="true" aria-labelledby="tituloModal" hidden>
+        <div class="modal-caja">
+            <h2 id="tituloModal">Acceso al Atril</h2>
+            <form id="formAuth">
+                <label for="campoNombre">Nombre completo</label>
+                <input id="campoNombre" type="text" hidden>
+                <label for="campoEmail">Correo electrónico</label>
+                <input id="campoEmail" type="email" required>
+                <label for="campoPassword">Contraseña (mínimo 6 caracteres)</label>
+                <input id="campoPassword" type="password" required minlength="6">
+                <p class="modal-error" id="modalError" role="alert"></p>
+                <div class="modal-acciones">
+                    <button type="button" class="btn-secundario" id="btnCerrarModal">Desestimar</button>
+                    <button type="submit" class="btn-principal" id="btnSubmitAuth">Ingresar</button>
+                </div>
+            </form>
+            <button class="btn-google" id="btnGoogle">Continuar con Google</button>
+        </div>
+    </div>
+
+    <div class="contenedor-toast" id="toastContainer" aria-live="polite"></div>
+
+    <!-- Scripts de la aplicación (en este orden exacto) -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
