@@ -44,7 +44,7 @@
     $('btnCamara').addEventListener('click', async () => {
       try {
         if (room) { toast('La cabina ya está enlazada.'); return; }
-        const resp = await fetch('/.netlify/functions/token?room=atril-sala-principal&identity=' +
+        const resp = await fetch('/api/token?room=atril-sala-principal&identity=' +
           encodeURIComponent(user.uid) + '&name=' + encodeURIComponent(nombre));
         const data = await resp.json();
         if (!data.token) throw new Error('sin token');
