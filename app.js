@@ -94,7 +94,7 @@
       const identidad = this.usuario ? this.usuario.uid : 'invitado-' + Date.now();
       const nombre = this.usuario ? (this.usuario.displayName || this.usuario.email) : 'Aprendiz';
       try {
-        const resp = await fetch('/.netlify/functions/token?room=' +
+        const resp = await fetch('/api/token?room=' +
           encodeURIComponent(sesion.sala || 'atril-sala-principal') +
           '&identity=' + encodeURIComponent(identidad) +
           '&name=' + encodeURIComponent(nombre) + '&publish=0');
