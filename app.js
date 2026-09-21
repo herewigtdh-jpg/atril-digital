@@ -134,6 +134,7 @@
     }
 
     desconectarVideo() {
+      if (this._senalInterval) { clearInterval(this._senalInterval); this._senalInterval = null; }
       if (this.room) { this.room.disconnect(); this.room = null; }
       const v = $('videoRemoto'); if (v) v.remove();
       const a = $('audioRemoto'); if (a) a.remove();
@@ -178,18 +179,43 @@
       if (!this.usuario || !t) return;
       this.db.collection('vademecum').doc(this.usuario.uid).set({ ['terminos.' + t]: 'adquisicion' }, { merge: true }).catch(() => {});
     } 
-     escucharSenalesDocente() {
-       if (this._senalSub) { this._senalSub(); this._senalSub = null; }
-       if (!this.usuario) return;
-       this._senalSub = this.db.collection('senales').doc(this.usuario.uid).onSnapshot(d => {
-       if (!d.exists) return;
-       const s = d.data();
-       if (s.hablar && this.room) {
-       this.toast('El docente le da la palabra. Active su micrófono.');
-       this.room.localParticipant.setMicrophoneEnabled(true);
-       this.db.collection('senales').doc(this.usuario.uid).delete();
+        escucharSenalesDocente() {
+      // Limpiar intervalo anterior si existe
+      if (this._senalInterval) { clearInterval(this._senalInterval); this._senalInterval = null; }
+      if (!this.usuario || !this.room) return;
+      
+      // Polling cada 3 segundos (no onSnapshot)
+      this._senalInterval = setInterval(async () => {
+        try {
+          const doc = await this.db.collection('senales').doc(this.usuario.uid).get();
+          if (!doc.exists) return;
+          const s = doc.data();
+          
+          // Solo procesar si no está marcada como procesada
+          if (s.hablar && s.procesada !== true) {
+            this.toast('🎤 El docente le da la palabra. Hable ahora.');
+            await this.room.localParticipant.setMicrophoneEnabled(true);
+            
+            // Marcar como procesada INMEDIATAMENTE
+            await this.db.collection('senales').doc(this.usuario.uid).update({
+              procesada: true,
+              procesadaEn: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            // Borrar después de 8 segundos (tiempo suficiente para que el alumno hable)
+            setTimeout(() => {
+              this.db.collection('senales').doc(this.usuario.uid).delete().catch(() => {});
+              // Apagar micrófono automáticamente
+              if (this.room) {
+                this.room.localParticipant.setMicrophoneEnabled(false);
+                this.toast('Micrófono cerrado. Espere la siguiente señal del docente.');
+              }
+            }, 8000);
+          }
+        } catch (err) {
+          console.warn('Error al revisar señales:', err);
         }
-      }, () => {});
+      }, 3000); // Cada 3 segundos
     }
        mostrarOverlay() { this.overlayEspera(); }
     overlayEspera() {
