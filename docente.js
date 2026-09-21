@@ -1,4 +1,4 @@
-/* ============ CABINA DEL DOCENTE v1.1 ============ */
+/* ============ CABINA DEL DOCENTE v1.2 (Anti-Loop) ============ */
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -128,7 +128,7 @@
         });
       }, () => {});
 
-    /* ============ PANEL DE ALUMNOS CON CONTROL DE PALABRA ============ */
+    /* ============ PANEL DE ALUMNOS CON CONTROL DE PALABRA (ANTI-LOOP) ============ */
     const panelAlumnos = document.createElement('div');
     panelAlumnos.className = 'panel-cabina';
     panelAlumnos.style.marginTop = '1rem';
@@ -153,15 +153,40 @@
         const btn = document.createElement('button');
         btn.className = 'btn-principal btn-sm';
         btn.textContent = 'Dar palabra';
-        btn.addEventListener('click', () => {
-          db.collection('senales').doc(d.id).set({
+        
+        btn.addEventListener('click', async () => {
+          // 1. Verificar que el usuario sea aprendiz
+          const userDoc = await db.collection('usuarios').doc(d.id).get();
+          if (!userDoc.exists || userDoc.data().rol !== 'aprendiz') {
+            toast('Solo se puede dar palabra a alumnos.');
+            return;
+          }
+          
+          // 2. Borrar cualquier señal anterior primero (limpieza preventiva)
+          await db.collection('senales').doc(d.id).delete().catch(() => {});
+          
+          // 3. Crear señal limpia
+          await db.collection('senales').doc(d.id).set({
             hablar: true,
+            procesada: false,
+            enviadaPor: user.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
-          }).then(() => toast('Señal enviada a ' + (u.nombre || u.email)));
+          });
+          
+          toast('🎤 Señal enviada a ' + (u.nombre || u.email));
+          
+          // 4. Auto-limpiar después de 15 segundos (por si el alumno no se conecta o cierra la pestaña)
+          setTimeout(() => {
+            db.collection('senales').doc(d.id).delete().catch(() => {});
+          }, 15000);
         });
+        
         fila.append(txt, btn);
         lista.appendChild(fila);
       });
-    }, () => {});
-  }
-})();
+    }, (err) => {
+      console.error('Error cargando alumnos:', err);
+    });
+
+  } // ← Cierra iniciarCabina
+})(); // ← Cierra el archivo
