@@ -1,4 +1,4 @@
-/* ============ CABINA DEL DOCENTE v1.0 ============ */
+/* ============ CABINA DEL DOCENTE v1.1 ============ */
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -127,5 +127,41 @@
           lista.appendChild(fila);
         });
       }, () => {});
+
+    /* ============ PANEL DE ALUMNOS CON CONTROL DE PALABRA ============ */
+    const panelAlumnos = document.createElement('div');
+    panelAlumnos.className = 'panel-cabina';
+    panelAlumnos.style.marginTop = '1rem';
+    panelAlumnos.innerHTML = '<h2>Alumnos en el aula</h2><p class="descripcion-progreso" id="avisoAlumnos">La lista aparecerá cuando los alumnos se conecten.</p><div id="listaAlumnos"></div>';
+    $('zonaCabina').appendChild(panelAlumnos);
+
+    db.collection('usuarios').where('rol', '==', 'aprendiz').onSnapshot(snap => {
+      const lista = $('listaAlumnos');
+      const aviso = $('avisoAlumnos');
+      lista.innerHTML = '';
+      if (snap.empty) {
+        if (aviso) aviso.textContent = 'Aún no hay alumnos registrados.';
+        return;
+      }
+      if (aviso) aviso.hidden = true;
+      snap.forEach(d => {
+        const u = d.data();
+        const fila = document.createElement('div');
+        fila.className = 'fila-interpelacion';
+        const txt = document.createElement('span');
+        txt.textContent = u.nombre || u.email;
+        const btn = document.createElement('button');
+        btn.className = 'btn-principal btn-sm';
+        btn.textContent = 'Dar palabra';
+        btn.addEventListener('click', () => {
+          db.collection('senales').doc(d.id).set({
+            hablar: true,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          }).then(() => toast('Señal enviada a ' + (u.nombre || u.email)));
+        });
+        fila.append(txt, btn);
+        lista.appendChild(fila);
+      });
+    }, () => {});
   }
 })();
