@@ -90,14 +90,17 @@
 
     /* ---------- VIDEO EN VIVO (LiveKit) ---------- */
     async conectarVideo(sesion) {
-      if (this.room || !window.LivekitClient) return;this.overlayConectando();
+      if (this.room || !window.LivekitClient) return;
+      this.overlayConectando();
       const identidad = this.usuario ? this.usuario.uid : 'invitado-' + Date.now();
       const nombre = this.usuario ? (this.usuario.displayName || this.usuario.email) : 'Aprendiz';
       try {
+        // DETALLE 1 CORREGIDO: publish=1 para permitir que el docente active el micrófono del alumno
         const resp = await fetch('/api/token?room=' +
           encodeURIComponent(sesion.sala || 'atril-sala-principal') +
           '&identity=' + encodeURIComponent(identidad) +
-          '&name=' + encodeURIComponent(nombre) + '&publish=0');
+          '&name=' + encodeURIComponent(nombre) + '&publish=1');
+        
         const data = await resp.json();
         if (!data.token) throw new Error('sin token');
         const LK = window.LivekitClient;
@@ -106,6 +109,8 @@
         this.room.on(LK.RoomEvent.TrackUnsubscribed, (track) => track.detach());
         this.room.on(LK.RoomEvent.Disconnected, () => { this.room = null; this.mostrarOverlay(); });
         await this.room.connect(data.url, data.token);
+        
+        // El micrófono inicia apagado por defecto, esperando la señal del docente
         this.room.localParticipant.setMicrophoneEnabled(false);
         this.escucharSenalesDocente();
         this.ocultarOverlay();
@@ -134,24 +139,40 @@
     }
 
     desconectarVideo() {
-      if (this._senalInterval) { clearInterval(this._senalInterval); this._senalInterval = null; }
-      if (this.room) { this.room.disconnect(); this.room = null; }
+      // DETALLE 3 CORREGIDO: Limpieza total y segura al salir
+      if (this._senalInterval) { 
+        clearInterval(this._senalInterval); 
+        this._senalInterval = null; 
+      }
+      if (this.room && this.room.localParticipant) {
+        this.room.localParticipant.setMicrophoneEnabled(false).catch(() => {});
+        this.room.localParticipant.setCameraEnabled(false).catch(() => {});
+      }
+      if (this.room) { 
+        this.room.disconnect(); 
+        this.room = null; 
+      }
       const v = $('videoRemoto'); if (v) v.remove();
       const a = $('audioRemoto'); if (a) a.remove();
       this.mostrarOverlay();
     }
-        escucharVademecum() {
+
+    escucharVademecum() {
       if (this._vadeSub) { this._vadeSub(); this._vadeSub = null; }
       if (!this.usuario) { this.renderVademecum({}); return; }
       this._vadeSub = this.db.collection('vademecum').doc(this.usuario.uid).onSnapshot(d => {
         this.renderVademecum(d.exists ? (d.data().terminos || {}) : {});
       }, () => {});
     }
+
     renderVademecum(terminos) {
       const cont = $('listaVademecum'); if (!cont) return;
       cont.innerHTML = '';
-      const claves = Object.keys(terminos);
-      if (!claves.length) { cont.innerHTML = '<p class="descripcion-progreso">Aún no hay términos: cuando el docente fije el Término del Momento, aparecerá aquí.</p>'; return; }
+      const claves = terminos ? Object.keys(terminos) : [];
+      if (!claves.length) { 
+        cont.innerHTML = '<p class="descripcion-progreso">Aún no hay términos: cuando el docente fije el Término del Momento, aparecerá aquí.</p>'; 
+        return; 
+      }
       claves.forEach(t => {
         const chip = document.createElement('button');
         chip.className = 'chip-termino';
@@ -162,6 +183,7 @@
         cont.appendChild(chip);
       });
     }
+
     avanzarTermino(t, estado) {
       if (!this.usuario) return;
       const orden = { adquisicion: 'consolidacion', consolidacion: 'dominio', dominio: 'dominio' };
@@ -175,37 +197,33 @@
         this.toast(sig === 'dominio' ? '🏅 Ceremonia de Dominio consolidado: ' + t : '➡️ ' + t + ' pasa a Consolidación (+' + pts + ' puntos)');
       }).catch(() => this.toast('Anomalía al avanzar el término.'));
     }
+
     sembrarTermino(t) {
       if (!this.usuario || !t) return;
       this.db.collection('vademecum').doc(this.usuario.uid).set({ ['terminos.' + t]: 'adquisicion' }, { merge: true }).catch(() => {});
     } 
-        escucharSenalesDocente() {
-      // Limpiar intervalo anterior si existe
+
+    escucharSenalesDocente() {
       if (this._senalInterval) { clearInterval(this._senalInterval); this._senalInterval = null; }
       if (!this.usuario || !this.room) return;
       
-      // Polling cada 3 segundos (no onSnapshot)
       this._senalInterval = setInterval(async () => {
         try {
           const doc = await this.db.collection('senales').doc(this.usuario.uid).get();
           if (!doc.exists) return;
           const s = doc.data();
           
-          // Solo procesar si no está marcada como procesada
           if (s.hablar && s.procesada !== true) {
             this.toast('🎤 El docente le da la palabra. Hable ahora.');
             await this.room.localParticipant.setMicrophoneEnabled(true);
             
-            // Marcar como procesada INMEDIATAMENTE
             await this.db.collection('senales').doc(this.usuario.uid).update({
               procesada: true,
               procesadaEn: firebase.firestore.FieldValue.serverTimestamp()
             });
             
-            // Borrar después de 8 segundos (tiempo suficiente para que el alumno hable)
             setTimeout(() => {
               this.db.collection('senales').doc(this.usuario.uid).delete().catch(() => {});
-              // Apagar micrófono automáticamente
               if (this.room) {
                 this.room.localParticipant.setMicrophoneEnabled(false);
                 this.toast('Micrófono cerrado. Espere la siguiente señal del docente.');
@@ -214,10 +232,19 @@
           }
         } catch (err) {
           console.warn('Error al revisar señales:', err);
+          // DETALLE 2 CORREGIDO: Detener el intervalo si hay error persistente (ej. AdBlock)
+          if (this._senalInterval) { 
+            clearInterval(this._senalInterval); 
+            this._senalInterval = null; 
+          }
+          if (err.message && (err.message.includes('permission') || err.message.includes('BLOCKED'))) {
+            this.toast('⚠️ Tu navegador o una extensión está bloqueando la conexión. Revisa AdBlock o permisos.');
+          }
         }
-      }, 3000); // Cada 3 segundos
+      }, 3000);
     }
-       mostrarOverlay() { this.overlayEspera(); }
+
+    mostrarOverlay() { this.overlayEspera(); }
     overlayEspera() {
       const o = document.querySelector('.overlay-video'); if (!o) return;
       o.style.display = 'flex';
