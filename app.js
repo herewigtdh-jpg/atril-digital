@@ -106,6 +106,8 @@
         this.room.on(LK.RoomEvent.TrackUnsubscribed, (track) => track.detach());
         this.room.on(LK.RoomEvent.Disconnected, () => { this.room = null; this.mostrarOverlay(); });
         await this.room.connect(data.url, data.token);
+        this.room.localParticipant.setMicrophoneEnabled(false);
+        this.escucharSenalesDocente();
         this.ocultarOverlay();
         this.toast('Enlace de video establecido con el atril.');
       } catch (err) {
@@ -176,6 +178,19 @@
       if (!this.usuario || !t) return;
       this.db.collection('vademecum').doc(this.usuario.uid).set({ ['terminos.' + t]: 'adquisicion' }, { merge: true }).catch(() => {});
     } 
+     escucharSenalesDocente() {
+       if (this._senalSub) { this._senalSub(); this._senalSub = null; }
+       if (!this.usuario) return;
+       this._senalSub = this.db.collection('senales').doc(this.usuario.uid).onSnapshot(d => {
+       if (!d.exists) return;
+       const s = d.data();
+       if (s.hablar && this.room) {
+       this.toast('El docente le da la palabra. Active su micrófono.');
+       this.room.localParticipant.setMicrophoneEnabled(true);
+       this.db.collection('senales').doc(this.usuario.uid).delete();
+        }
+      }, () => {});
+    }
        mostrarOverlay() { this.overlayEspera(); }
     overlayEspera() {
       const o = document.querySelector('.overlay-video'); if (!o) return;
